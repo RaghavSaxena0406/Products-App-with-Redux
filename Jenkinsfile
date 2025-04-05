@@ -1,32 +1,41 @@
 pipeline {
     agent any
+
     environment {
-        AZURE_CREDENTIALS_ID = 'jenkins-pipeline-sp'
-        RESOURCE_GROUP = 'static-webapp-rg'
-        APP_SERVICE_NAME = 'stwebapp-app-service'
+        AZURE_APP_NAME = 'my-react-webapp'
+        AZURE_RG = 'reactapp-rg'
+        NODE_HOME = tool name: 'NodeJS_16', type: 'jenkins.plugins.nodejs.tools.NodeJSInstallation'
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Clone Repository') {
             steps {
-                git branch: 'master', url: 'https://github.com/RaghavSaxena0406/Products-App-with-Redux.git'
+                git branch : 'master', url : 'https://github.com/RaghavSaxena0406/Products-App-with-Redux.git'
             }
         }
 
-        stage('Build') {
+        stage('Install Dependencies') {
             steps {
-                bat 'dotnet restore'
-                bat 'dotnet build --configuration Release'
-                bat 'dotnet publish -c Release -o ./publish'
+                sh 'npm install'
             }
         }
 
-        stage('Deploy') {
+        stage('Build React App') {
             steps {
-                withCredentials([azureServicePrincipal(credentialsId: AZURE_CREDENTIALS_ID)]) {
-                    bat "az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID"
-                    bat "powershell Compress-Archive -Path ./publish/* -DestinationPath ./publish.zip -Force"
-                    bat "az webapp deploy --resource-group $RESOURCE_GROUP --name $APP_SERVICE_NAME --src-path ./publish.zip --type zip"
+                sh 'npm run build'
+            }
+        }
+
+        stage('Deploy to Azure') {
+            steps {
+                withCredentials([azureServicePrincipal('AZURE_CREDENTIALS')]) {
+                    sh '''
+                        az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
+                        az webapp deployment source config-zip \
+                          --resource-group $AZURE_RG \
+                          --name $AZURE_APP_NAME \
+                          --src build.zip
+                    '''
                 }
             }
         }
@@ -34,10 +43,10 @@ pipeline {
 
     post {
         success {
-            echo 'Deployment Successful!'
+            echo '🚀 Deployed Successfully!'
         }
         failure {
-            echo 'Deployment Failed!'
+            echo '❌ Deployment Failed!'
         }
     }
 }
